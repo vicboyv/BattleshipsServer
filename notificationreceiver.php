@@ -43,24 +43,10 @@
 							timestamp VARCHAR(16),
 							creditscost VARCHAR(10)
 						)";
-		if(mysqli_query($link, $sqlcommand))
-		{
-			echo 'Notifications database created/accessed. <br>';
-		}
-		else
-		{
-			echo 'Notifications database WAS NOT created/accessed. <br>';
-		}
+		mysqli_query($link, $sqlcommand);
 		$sqlcommand = 	"INSERT INTO Notifications(messageid, mobilenumber, shortcode, status, timestamp, creditscost) 
 						VALUES('$message_id', '$mobile_number', '$shortcode', '$status', '$timestamp', '$credits_cost')";
-		if(mysqli_query($link, $sqlcommand))
-		{
-			echo 'Notification recorded into database. <br>';
-		}
-		else
-		{
-			die('Notification was NOT recorded into database: ' . mysqli_error($link));
-		}
+		mysqli_query($link, $sqlcommand);
 	}
 	function recordAccess($link) //test method
 	{
@@ -70,57 +56,26 @@
 							accesstime VARCHAR(16),
 							accesspage VARCHAR(32)
 						)";
-		if(mysqli_query($link, $sqlcommand))
-		{
-			echo 'Access database created/accessed. <br>';
-		}
-		else
-		{
-			echo 'Access database WAS NOT created/accessed. <br>';
-		}
+		mysqli_query($link, $sqlcommand);
 		$timeaccessed = time();
 		$sqlcommand = 	"INSERT INTO Access(accesstime, accesspage) 
 						VALUES('$timeaccessed', 'notificationsreceiver')";
-		if(mysqli_query($link, $sqlcommand))
-		{
-			echo 'Access recorded into database. <br>';
-		}
-		else
-		{
-			die('Access was NOT recorded into database: ' . mysqli_error($link));
-		}
+		mysqli_query($link, $sqlcommand);
 	}
 	function connectSQL()
 	{
 		$link = mysqli_connect(SQLHOST,SQLUSER,SQLPASS); 
-		if (!$link) 
-		{ 
-			die('Could not connect to MySQL: ' . mysqli_error()); 
-		} 
-		echo 'Connection OK <br>'; 
 		return $link;
 	}
 	function createBattleshipsDB($link)
 	{
 		$sqlcommand = "CREATE DATABASE IF NOT EXISTS ".SQLDB;
-		if (mysqli_query($link, $sqlcommand)) 
-		{
-			echo "Database created successfully <br>";
-		} 
-		else 
-		{
-			echo "Error creating database: " . mysqli_error($link);
-		}
+		mysqli_query($link, $sqlcommand);
 	}
 	function selectBattleshipsDB($link)
 	{
 		createBattleshipsDB($link);
 		$link = mysqli_connect(SQLHOST, SQLUSER, SQLPASS, SQLDB); 
-			if (!$link) 
-			{ 
-				die('Could not connect to battleships: ' . mysqli_error()); 
-			} 
-		echo 'Database OK <br>'; 
 		return $link;
 	}
 ?>

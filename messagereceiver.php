@@ -85,7 +85,6 @@
 		{
 			$messagecontent = "UPDATE." . $oppblueprint . ".";
 			replyText($oppphone, $messagecontent, getLastRequestId($oppphone));
-			
 			mysqli_query($link, "UPDATE Playing SET turn = $turn WHERE id = $id"); //put a conditional
 			mysqli_query($link, "UPDATE Playing SET blueprint = '$oppblueprint' WHERE id = $oppid");
 		}
@@ -116,30 +115,24 @@
 		{ 
 			die('Could not connect to MySQL: ' . mysqli_error()); 
 		} 
-		echo 'Connection OK <br>'; 
 		return $link;
 	}
 	function createBattleshipsDB($link)
 	{
 		$sqlcommand = "CREATE DATABASE IF NOT EXISTS ".SQLDB;
-		if (mysqli_query($link, $sqlcommand)) 
-		{
-			echo "Database created successfully <br>";
-		} 
-		else 
+		if (!(mysqli_query($link, $sqlcommand))) 
 		{
 			echo "Error creating database: " . mysqli_error($link);
-		}
+		} 
 	}
 	function selectBattleshipsDB($link)
 	{
 		createBattleshipsDB($link);
 		$link = mysqli_connect(SQLHOST, SQLUSER, SQLPASS, SQLDB); 
-			if (!$link) 
-			{ 
-				die('Could not connect to battleships: ' . mysqli_error()); 
-			} 
-		echo 'Database OK <br>'; 
+		if (!$link) 
+		{ 
+			die('Could not connect to battleships: ' . mysqli_error()); 
+		} 
 		return $link;
 	}
 	function createQueue($link)
@@ -150,25 +143,17 @@
 							phone VARCHAR(15) NOT NULL,
 							blueprint VARCHAR(256) NOT NULL
 						)";
-		if (mysqli_query($link, $sqlcommand)) 
-		{
-			echo "Table Queue created successfully <br>";
-		} 
-		else 
+		if (!(mysqli_query($link, $sqlcommand))) 
 		{
 			echo "Error creating table: " . mysqli_error($link);
-		}
+		} 
 	}
 	function queuePlayer($link, $phonenumber, $blueprint)
 	{
 		createQueue($link);
 		$sqlcommand = 	"INSERT INTO Queue(phone, blueprint) 
 						VALUES('$phonenumber', '$blueprint')";
-		if(mysqli_query($link, $sqlcommand))
-		{
-			echo "New record created successfully <br>";
-		}
-		else
+		if(!(mysqli_query($link, $sqlcommand)))
 		{
 			echo "Error occured when creating record for Queue table";
 		}
@@ -196,19 +181,11 @@
 			updatePlayer($link, $playerid[0]);
 			updatePlayer($link, $playerid[1]);
 		} 
-		else 
-		{
-			echo "No other players present. <br>";
-		}
 	}
 	function dequeuePlayer($link, $id)
 	{
 		$sqlcommand = "DELETE FROM Queue WHERE id = $id";
-		if(mysqli_query($link, $sqlcommand))
-		{
-			echo "Player $id successfully dequeued. <br>";
-		}
-		else
+		if(!(mysqli_query($link, $sqlcommand)))
 		{
 			echo "Error occured when dequeuing player $id";
 		}
@@ -223,24 +200,16 @@
 							turn INT(3),
 							oppid INT(6) UNSIGNED
 						)";
-		if (mysqli_query($link, $sqlcommand)) 
-		{
-			echo "Table Playing created successfully <br>";
-		} 
-		else 
+		if (!(mysqli_query($link, $sqlcommand))) 
 		{
 			echo "Error creating table: " . mysqli_error($link);
-		}
+		} 
 	}
 	function playPlayer($link, $id, $phonenumber, $blueprint, $oppid, $turnstart)
 	{
 		$sqlcommand = 	"INSERT INTO Playing(id, phone, blueprint, oppid, turn) 
 						VALUES($id, '$phonenumber', '$blueprint', $oppid, $turnstart)";
-		if(mysqli_query($link, $sqlcommand))
-		{
-			echo "New record created successfully for playing <br>";
-		}
-		else
+		if(!(mysqli_query($link, $sqlcommand)))
 		{
 			echo "Error occured when creating record for playing table";
 		}
@@ -298,7 +267,6 @@
 	}
 	function sendChikka($data)
 	{
-		echo "starting sendChikka <br>";
 		$data = array_merge($data, 
 			array
 			(
@@ -354,14 +322,11 @@
 		if($playerrequestid == 'none')
 		{
 			$textcontent = $textcontent . "SEND.";
-			echo "<br>Used SEND";
 			sendText($playerphone, $textcontent);
 		}
 		else
 		{
 			$textcontent = $textcontent . "REPLY.";
-			echo "<br>Used REPLY<br>";
-			echo $playerrequestid;
 			replyText($playerphone, $textcontent, $playerrequestid);
 		}
 	}
@@ -377,21 +342,13 @@
 							requestid VARCHAR(128),
 							timestamp VARCHAR(16)
 						)";
-		if(mysqli_query($link, $sqlcommand))
-		{
-			echo 'Received database created/accessed. <br>';
-		}
-		else
+		if(!(mysqli_query($link, $sqlcommand)))
 		{
 			echo 'Received database WAS NOT created/accessed. <br>';
 		}
 		$sqlcommand = 	"INSERT INTO Received(messagetype, message, mobilenumber, shortcode, requestid, timestamp) 
 						VALUES('$message_type', '$message', '$mobile_number', '$shortcode', '$request_id', '$timestamp')";
-		if(mysqli_query($link, $sqlcommand))
-		{
-			echo 'SMS recorded into database. <br>';
-		}
-		else
+		if(!(mysqli_query($link, $sqlcommand)))
 		{
 			die('SMS was NOT recorded into database: ' . mysqli_error($link));
 		}
@@ -404,22 +361,14 @@
 							accesstime VARCHAR(16),
 							accesspage VARCHAR(32)
 						)";
-		if(mysqli_query($link, $sqlcommand))
-		{
-			echo 'Access database created/accessed. <br>';
-		}
-		else
+		if(!(mysqli_query($link, $sqlcommand)))
 		{
 			echo 'Access database WAS NOT created/accessed. <br>';
 		}
 		$timeaccessed = time();
 		$sqlcommand = 	"INSERT INTO Access(accesstime, accesspage) 
 						VALUES('$timeaccessed', 'messagereceiver')";
-		if(mysqli_query($link, $sqlcommand))
-		{
-			echo 'Access recorded into database. <br>';
-		}
-		else
+		if(!(mysqli_query($link, $sqlcommand)))
 		{
 			die('Access was NOT recorded into database: ' . mysqli_error($link));
 		}
