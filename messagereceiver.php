@@ -3,6 +3,8 @@
 	include 'SecretData.php';
 	
 	//Receive SMS
+	$sqlink = selectBattleshipsDB(connectSQL());
+	recordAccess($sqlink);
 	
 	try
 	{
@@ -28,8 +30,6 @@
 		exit(0);
 	}
 	
-	$sqlink = selectBattleshipsDB(connectSQL());
-	recordAccess($sqlink);
 	recordReceivedSMS($sqlink, $message_type, $message, $mobile_number, $shortcode, $timestamp, $request_id);
 	
 	//Queue System
@@ -338,30 +338,31 @@
 		{
 			echo "ERROR OCCURED in updatePlayer! <br>";
 		}
-		$sqlcommand = "SELECT phone, blueprint FROM Playing WHERE id = $oppid";
+		$sqlcommand = "SELECT blueprint FROM Playing WHERE id = $oppid";
 		$selection = mysqli_query($link, $sqlcommand);
 		if (mysqli_num_rows($selection) > 0) 
 		{
 			$selectedrow = mysqli_fetch_assoc($selection);
 			$oppblueprint = $selectedrow["blueprint"];
-			
-			$oppphone = $selectedrow["phone"];
 		}
 		else
 		{
 			echo "ERROR OCCURED in updatePlayer! <br>";
 		}
 		$textcontent = "UPDATE." . $oppblueprint . "." . $playerturn . ".";
-		$opprequestid = getLastRequestId($oppphone);
-		if($opprequestid == 'none')
+		$playerrequestid = getLastRequestId($link, $playerphone);
+		if($playerrequestid == 'none')
 		{
 			$textcontent = $textcontent . "SEND.";
+			echo "<br>Used SEND";
 			sendText($playerphone, $textcontent);
 		}
 		else
 		{
 			$textcontent = $textcontent . "REPLY.";
-			replyText($playerphone, $textcontent, $opprequestid);
+			echo "<br>Used REPLY<br>";
+			echo $playerrequestid;
+			replyText($playerphone, $textcontent, $playerrequestid);
 		}
 	}
 	function recordReceivedSMS($link, $message_type, $message, $mobile_number, $shortcode, $timestamp, $request_id) //test method

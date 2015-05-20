@@ -40,7 +40,7 @@
 							mobilenumber VARCHAR(12),
 							shortcode VARCHAR(11),
 							status VARCHAR(8),
-							timestamp VARCHAR(16)
+							timestamp VARCHAR(16),
 							creditscost VARCHAR(10)
 						)";
 		if(mysqli_query($link, $sqlcommand))
