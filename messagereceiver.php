@@ -16,7 +16,6 @@
 			$shortcode = $_POST["shortcode"];
 			$timestamp = $_POST["timestamp"];
 			$request_id = $_POST["request_id"];
-			$tokens = explode(".", $message);
 			echo "Accepted";
 		}
 		else
@@ -32,6 +31,8 @@
 	
 	recordReceivedSMS($sqlink, $message_type, $message, $mobile_number, $shortcode, $timestamp, $request_id);
 	
+	$tokens = explode(".", $message);
+	
 	//Queue System
 	//IF CONNECT: Create Queue DB --> Queue Player (1 & 2) -WAIT-> Match Players --> Create Playing DB --> Dequeue Players --> Play Players --> Update Players
 	if(strcmp($tokens[0], "CONNECT") == 0)
@@ -39,19 +40,25 @@
 		queuePlayer($sqlink, $mobile_number, $tokens[1]);
 		matchPlayers($sqlink); //Contains SMS Send
 	}
-	elseif(strcomp($tokens[0], "ACTION") == 0)
+	elseif(strcmp($tokens[0], "ACTION") == 0)
 	{
-		actionPlayer($sqlink, findPlayerID($mobile_number), $token[1], $token[2]);
+		actionPlayer($sqlink, findPlayerID($sqlink, $mobile_number), $tokens[1], $tokens[2]);
 	}
-	elseif(strcomp($tokens[0], "FORFEIT") == 0)
+	elseif(strcmp($tokens[0], "FORFEIT") == 0)
 	{
-		//endPlayers
+		forfeitPlayer($sqlink, findPlayerID($sqlink, $mobile_number));
 	}
 	else
 	{
-		echo "Command not recognized";
+		replyText($mobile_number, "Command not recognized!", getLastRequestId($sqlink, $mobile_number));
 	}
 	mysqli_close($sqlink); 
+	exit(0);
+	
+	function forfeitPlayer($link, $id)
+	{
+		
+	}
 	
 	function actionPlayer($link, $id, $oppblueprint, $turn) //untested
 	{
@@ -84,7 +91,7 @@
 		if($turn > $previousturn)
 		{
 			$messagecontent = "UPDATE." . $oppblueprint . ".";
-			replyText($oppphone, $messagecontent, getLastRequestId($oppphone));
+			replyText($oppphone, $messagecontent, getLastRequestId($link, $oppphone));
 			mysqli_query($link, "UPDATE Playing SET turn = $turn WHERE id = $id"); //put a conditional
 			mysqli_query($link, "UPDATE Playing SET blueprint = '$oppblueprint' WHERE id = $oppid");
 		}
@@ -215,37 +222,12 @@
 		}
 	}
 	//SelfNote: Used for delivery notifications module. MessageID can be anything. It is used to prevent duplicates. That module needs to know if a message is a duplicate.
-	function sendText($phone, $message)
-	{
-		$messageid = time() . $phone;
-
-		if (!is_numeric($phone) && !mb_check_encoding($phone, 'UTF-8')) 
-		{
-			trigger_error('TO needs to be a valid UTF-8 encoded string');
-			return false;
-		}
-		if (!mb_check_encoding($message, 'UTF-8')) 
-		{
-			trigger_error('Message needs to be a valid UTF-8 encoded string');
-			return false;
-		}
-		$message = urlencode($message);
-
-		$sendData = array(
-			'mobile_number' => $phone,
-			'message_id' => $messageid,
-			'message' => $message,
-			'message_type' => 'SEND'
-			);
-		return sendChikka($sendData);
-	}
+	
 	function replyText($phone, $message, $requestid)
 	{
-		$messageid = time() . $phone;
-
 		if (!is_numeric($phone) && !mb_check_encoding($phone, 'UTF-8')) 
 		{
-			trigger_error('TO needs to be a valid UTF-8 encoded string');
+			trigger_error('Phone number needs to be a valid UTF-8 encoded string');
 			return false;
 		}
 		if (!mb_check_encoding($message, 'UTF-8')) 
@@ -253,20 +235,40 @@
 			trigger_error('Message needs to be a valid UTF-8 encoded string');
 			return false;
 		}
+		$messageid = time() . $phone;
 		$message = urlencode($message);
-
 		$sendData = array(
 			'mobile_number' => $phone,
 			'message_id' => $messageid,
 			'message' => $message,
-			'message_type' => 'REPLY',
-			'request_id' => $requestid,
-			'request_cost' => 'FREE'
+		);
+		if($requestid == 'none')
+		{
+			$sendData = array_merge($sendData, 
+				array
+				(
+					'message_type' => 'SEND',
+				)
 			);
+		}
+		else
+		{
+			$sendData = array_merge($sendData, 
+				array
+				(
+					'message_type' => 'REPLY',
+					'request_id' => $requestid,
+					'request_cost' => 'FREE'
+				)
+			);
+		}
 		return sendChikka($sendData);
 	}
+	
+	
 	function sendChikka($data)
 	{
+		
 		$data = array_merge($data, 
 			array
 			(
@@ -289,6 +291,7 @@
 
 		curl_exec($ch);
 		curl_close($ch);
+		
 		return true;
 	}
 	function updatePlayer($link, $id) //Update Player consists of opponent's blueprint and player's turn
@@ -319,16 +322,7 @@
 		}
 		$textcontent = "UPDATE." . $oppblueprint . "." . $playerturn . ".";
 		$playerrequestid = getLastRequestId($link, $playerphone);
-		if($playerrequestid == 'none')
-		{
-			$textcontent = $textcontent . "SEND.";
-			sendText($playerphone, $textcontent);
-		}
-		else
-		{
-			$textcontent = $textcontent . "REPLY.";
-			replyText($playerphone, $textcontent, $playerrequestid);
-		}
+		replyText($playerphone, $textcontent, $playerrequestid);
 	}
 	function recordReceivedSMS($link, $message_type, $message, $mobile_number, $shortcode, $timestamp, $request_id) //test method
 	{
@@ -382,11 +376,11 @@
 		{
 			$selectedrow = mysqli_fetch_assoc($selection);
 			$requestid = $selectedrow["requestid"];
-			mysqli_query($link, "UPDATE Received SET requestid = 'used' WHERE mobilenumber = '$phonenumber'"); 
+			mysqli_query($link, "UPDATE Received SET requestid = 'used' WHERE requestid = '$requestid'"); 
 		}
 		return $requestid;
 	}
-	function verifyBlueprint($blueprintA) //UNTESTED
+	function verifyBlueprint($blueprintA, $blueprintB) //UNTESTED
 	{
 		$A = str_split($blueprintA);
 		$B = str_split($blueprintB); //UNDONE
