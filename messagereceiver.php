@@ -43,10 +43,14 @@
 	elseif(strcmp($tokens[0], "ACTION") == 0)
 	{
 		actionPlayer($sqlink, findPlayerID($sqlink, $mobile_number), $tokens[1], $tokens[2]);
+		if(allShipsLost($tokens[1]))
+		{
+			endPlayer($sqlink, $findPlayerID($sqlink, $mobile_number));
+		}
 	}
 	elseif(strcmp($tokens[0], "FORFEIT") == 0)
 	{
-		forfeitPlayer($sqlink, findPlayerID($sqlink, $mobile_number));
+		forfeitPlayer($sqlink, findPlayerID($sqlink, $mobile_number)); //remember to send text
 	}
 	else
 	{
@@ -54,10 +58,52 @@
 	}
 	mysqli_close($sqlink); 
 	exit(0);
-	
+	function endPlayer($link, $id)
+	{
+		$sqlcommand = "SELECT oppid FROM Playing WHERE id = $id";
+		$selection = mysqli_query($link, $sqlcommand);
+		if (mysqli_num_rows($selection) > 0) 
+		{
+			$selectedrow = mysqli_fetch_assoc($selection);
+			$oppid = $selectedrow["oppid"];
+		}
+		$sqlcommand = "DELETE FROM Playing WHERE id = $id";
+		if(!(mysqli_query($link, $sqlcommand)))
+		{
+			echo "Error occured when removing player from Playing";
+		}
+		$sqlcommand = "DELETE FROM Playing WHERE id = $oppid";
+		if(!(mysqli_query($link, $sqlcommand)))
+		{
+			echo "Error occured when removing opponent from Playing";
+		}
+	}
 	function forfeitPlayer($link, $id)
 	{
-		
+		$sqlcommand = "SELECT oppid FROM Playing WHERE id = $id";
+		$selection = mysqli_query($link, $sqlcommand);
+		if (mysqli_num_rows($selection) > 0) 
+		{
+			$selectedrow = mysqli_fetch_assoc($selection);
+			$oppid = $selectedrow["oppid"];
+		}
+		else
+		{
+			echo "ERROR OCCURED in actionPlayer! <br>";
+		}
+		$sqlcommand = "SELECT phone FROM Playing WHERE id = $oppid";
+		$selection = mysqli_query($link, $sqlcommand);
+		if (mysqli_num_rows($selection) > 0) 
+		{
+			$selectedrow = mysqli_fetch_assoc($selection);
+			$oppphone = $selectedrow["phone"];
+		}
+		else
+		{
+			echo "ERROR OCCURED in actionPlayer! <br>";
+		}
+		replyText($oppphone, "FORFEIT", getLastRequestId($link, $oppphone));
+		endPlayer($link, $id);
 	}
 	
 	function actionPlayer($link, $id, $oppblueprint, $turn) //untested
@@ -380,7 +426,11 @@
 		}
 		return $requestid;
 	}
-	function verifyBlueprint($blueprintA, $blueprintB) //UNTESTED
+	function allShipsLost($blueprint)
+	{
+		return (substr_count($blueprint, '1') == 0)
+	}
+	function verifyBlueprint($blueprintA, $blueprintB) //UNUSED
 	{
 		$A = str_split($blueprintA);
 		$B = str_split($blueprintB); //UNDONE
