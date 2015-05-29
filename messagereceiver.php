@@ -1,11 +1,12 @@
 <?php
-	//Server-dependent variables
+	//PHP runs when player's text is sent to Chikka, and Chikka sends to your server & this script.
+	//SecretData includes SQLHOST, SQLUSER, SQLPASS, SQLDB, SHORTCODE, CHIKKAURL, CLIENTID, SECRETKEY
 	include 'SecretData.php';
 	
-	//Receive SMS
 	$sqlink = selectBattleshipsDB(connectSQL());
-	recordAccess($sqlink);
+	recordAccess($sqlink); //Recording access for debugging purposes.
 	
+	//try block puts POST values to non-global variables.
 	try
 	{
 		$message_type = $_POST["message_type"];
@@ -29,138 +30,108 @@
 		exit(0);
 	}
 	
-	recordReceivedSMS($sqlink, $message_type, $message, $mobile_number, $shortcode, $timestamp, $request_id);
+	recordReceivedSMS($sqlink, $message_type, $message, $mobile_number, $shortcode, $timestamp, $request_id); //Records all SMS details for replyText function (and debugging purposes).
 	
-	$tokens = explode(".", $message);
+	$tokens = explode(".", $message); //Splits message data into pieces (named tokens), delimiter is a period character. e.g. "This.splits.by.periods"
 	
-	//Queue System
-	//IF CONNECT: Create Queue DB --> Queue Player (1 & 2) -WAIT-> Match Players --> Create Playing DB --> Dequeue Players --> Play Players --> Update Players
-	if(strcmp($tokens[0], "CONNECT") == 0)
+	//IF blocks deal with the command token. Determines what message was received from player.
+	if(strcmp($tokens[0], "CONNECT") == 0) //CONNECT is the player initiating a matchmaking.
 	{
-		queuePlayer($sqlink, $mobile_number, $tokens[1]);
-		matchPlayers($sqlink); //Contains SMS Send
+		queuePlayer($sqlink, $mobile_number, $tokens[1]); //Queues the player with his blueprint to the Queue table. Can be identified with phone number.
+		matchPlayers($sqlink); //Checks if Queue table has two players and then pairs them and moves them to the Playing table.
 	}
-	elseif(strcmp($tokens[0], "ACTION") == 0)
+	elseif(strcmp($tokens[0], "ACTION") == 0) //ACTION is the player making a move in the game. Expected to be in the Player table by now.
 	{
-		actionPlayer($sqlink, findPlayerID($sqlink, $mobile_number), $tokens[1], $tokens[2]);
-		if(allShipsLost($tokens[1]))
+		actionPlayer($sqlink, findPlayerID($sqlink, $mobile_number), $tokens[1], $tokens[2]); //Records the player's action, with the opponent's new blueprint and the player's new turn.
+		if(allShipsLost($tokens[1])) //Checks if the opponent's blueprint has any ships left.
 		{
-			endPlayer($sqlink, $findPlayerID($sqlink, $mobile_number));
+			endPlayer($sqlink, findPlayerID($sqlink, $mobile_number)); //Removes the players from the playing queue. Win states are done on the Android app.
 		}
 	}
-	elseif(strcmp($tokens[0], "FORFEIT") == 0)
+	elseif(strcmp($tokens[0], "FORFEIT") == 0) //FORFEIT is the player giving up.
 	{
-		forfeitPlayer($sqlink, findPlayerID($sqlink, $mobile_number)); //remember to send text
+		forfeitPlayer($sqlink, findPlayerID($sqlink, $mobile_number)); //Sends the opponent a forfeit notice by the player. Removes the players from the Playing table.
 	}
-	else
+	else //Unknown command
 	{
-		replyText($mobile_number, "Command not recognized!", getLastRequestId($sqlink, $mobile_number));
+		replyText($mobile_number, "Command not recognized!", getLastRequestId($sqlink, $mobile_number)); //Tells the player that his text is invalid.
 	}
 	mysqli_close($sqlink); 
 	exit(0);
-	function endPlayer($link, $id)
-	{
-		$sqlcommand = "SELECT oppid FROM Playing WHERE id = $id";
-		$selection = mysqli_query($link, $sqlcommand);
-		if (mysqli_num_rows($selection) > 0) 
-		{
-			$selectedrow = mysqli_fetch_assoc($selection);
-			$oppid = $selectedrow["oppid"];
-		}
-		$sqlcommand = "DELETE FROM Playing WHERE id = $id";
-		if(!(mysqli_query($link, $sqlcommand)))
-		{
-			echo "Error occured when removing player from Playing";
-		}
-		$sqlcommand = "DELETE FROM Playing WHERE id = $oppid";
-		if(!(mysqli_query($link, $sqlcommand)))
-		{
-			echo "Error occured when removing opponent from Playing";
-		}
-	}
-	function forfeitPlayer($link, $id)
-	{
-		$sqlcommand = "SELECT oppid FROM Playing WHERE id = $id";
-		$selection = mysqli_query($link, $sqlcommand);
-		if (mysqli_num_rows($selection) > 0) 
-		{
-			$selectedrow = mysqli_fetch_assoc($selection);
-			$oppid = $selectedrow["oppid"];
-		}
-		else
-		{
-			echo "ERROR OCCURED in actionPlayer! <br>";
-		}
-		$sqlcommand = "SELECT phone FROM Playing WHERE id = $oppid";
-		$selection = mysqli_query($link, $sqlcommand);
-		if (mysqli_num_rows($selection) > 0) 
-		{
-			$selectedrow = mysqli_fetch_assoc($selection);
-			$oppphone = $selectedrow["phone"];
-		}
-		else
-		{
-			echo "ERROR OCCURED in actionPlayer! <br>";
-		}
-		replyText($oppphone, "FORFEIT", getLastRequestId($link, $oppphone));
-		endPlayer($link, $id);
-	}
 	
-	function actionPlayer($link, $id, $oppblueprint, $turn) //untested
+	//Below are the functions; first few are relevant to Chikka.
+	
+	function replyText($phone, $message, $requestid)
 	{
-		$sqlcommand = "SELECT turn, oppid FROM Playing WHERE id = $id";
-		$selection = mysqli_query($link, $sqlcommand);
-		if (mysqli_num_rows($selection) > 0) 
+		if (!is_numeric($phone) && !mb_check_encoding($phone, 'UTF-8')) 
 		{
-			$selectedrow = mysqli_fetch_assoc($selection);
-			$previousturn = $selectedrow["turn"];
-			$oppid = $selectedrow["oppid"];
+			trigger_error('Phone number needs to be a valid UTF-8 encoded string');
+			return false;
+		}
+		if (!mb_check_encoding($message, 'UTF-8')) 
+		{
+			trigger_error('Message needs to be a valid UTF-8 encoded string');
+			return false;
+		}
+		$messageid = time() . $phone;
+		$message = urlencode($message);
+		$sendData = array(
+			'mobile_number' => $phone,
+			'message_id' => $messageid,
+			'message' => $message,
+		);
+		if($requestid == 'none')
+		{
+			$sendData = array_merge($sendData, 
+				array
+				(
+					'message_type' => 'SEND',
+				)
+			);
 		}
 		else
 		{
-			echo "ERROR OCCURED in actionPlayer! <br>";
+			$sendData = array_merge($sendData, 
+				array
+				(
+					'message_type' => 'REPLY',
+					'request_id' => $requestid,
+					'request_cost' => 'FREE'
+				)
+			);
 		}
-		$sqlcommand = "SELECT phone FROM Playing WHERE id = $oppid";
-		$selection = mysqli_query($link, $sqlcommand);
-		if (mysqli_num_rows($selection) > 0) 
+		return sendChikka($sendData);
+	}
+	function sendChikka($data)
+	{
+		
+		$data = array_merge($data, 
+			array
+			(
+			'client_id'=> CLIENTID, 
+			'secret_key' => SECRETKEY,
+			'shortcode' => SHORTCODE
+			)
+		);
+		
+		$query_string = "";
+		foreach($data as $piece => $piecedata)
 		{
-			$selectedrow = mysqli_fetch_assoc($selection);
-			$oppphone = $selectedrow["phone"];
-		}
-		else
-		{
-			echo "ERROR OCCURED in actionPlayer! <br>";
+			$query_string .= '&'.$piece.'='.$piecedata;
 		}
 		
-		//SMS opponent blueprint to opponent phone
-		//insert opponent blueprint in Playing database
-		if($turn > $previousturn)
-		{
-			$messagecontent = "UPDATE." . $oppblueprint . ".";
-			replyText($oppphone, $messagecontent, getLastRequestId($link, $oppphone));
-			mysqli_query($link, "UPDATE Playing SET turn = $turn WHERE id = $id"); //put a conditional
-			mysqli_query($link, "UPDATE Playing SET blueprint = '$oppblueprint' WHERE id = $oppid");
-		}
-		else
-		{
-			echo "ERROR: Turn is not greater than player's previous turn.";
-		}
+		$ch = curl_init(CHIKKAURL);
+		curl_setopt($ch, CURLOPT_POST, count($data));
+		curl_setopt($ch, CURLOPT_POSTFIELDS, $query_string);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+		curl_exec($ch);
+		curl_close($ch);
+		
+		return true;
 	}
-	function findPlayerID($link, $phone)
-	{
-		$sqlcommand = "SELECT id FROM Playing WHERE phone = '$phone'";
-		$selection = mysqli_query($link, $sqlcommand);
-		if (mysqli_num_rows($selection) > 0) 
-		{
-			$selectedrow = mysqli_fetch_assoc($selection);
-			return $selectedrow["id"];
-		}
-		else
-		{
-			echo "ERROR OCCURED in finding player ID! <br>";
-			return -1;
-		}
-	}
+	
+	
 	function connectSQL()
 	{
 		$link = mysqli_connect(SQLHOST,SQLUSER,SQLPASS); 
@@ -267,80 +238,7 @@
 			echo "Error occured when creating record for playing table";
 		}
 	}
-	//SelfNote: Used for delivery notifications module. MessageID can be anything. It is used to prevent duplicates. That module needs to know if a message is a duplicate.
-	
-	function replyText($phone, $message, $requestid)
-	{
-		if (!is_numeric($phone) && !mb_check_encoding($phone, 'UTF-8')) 
-		{
-			trigger_error('Phone number needs to be a valid UTF-8 encoded string');
-			return false;
-		}
-		if (!mb_check_encoding($message, 'UTF-8')) 
-		{
-			trigger_error('Message needs to be a valid UTF-8 encoded string');
-			return false;
-		}
-		$messageid = time() . $phone;
-		$message = urlencode($message);
-		$sendData = array(
-			'mobile_number' => $phone,
-			'message_id' => $messageid,
-			'message' => $message,
-		);
-		if($requestid == 'none')
-		{
-			$sendData = array_merge($sendData, 
-				array
-				(
-					'message_type' => 'SEND',
-				)
-			);
-		}
-		else
-		{
-			$sendData = array_merge($sendData, 
-				array
-				(
-					'message_type' => 'REPLY',
-					'request_id' => $requestid,
-					'request_cost' => 'FREE'
-				)
-			);
-		}
-		return sendChikka($sendData);
-	}
-	
-	
-	function sendChikka($data)
-	{
-		
-		$data = array_merge($data, 
-			array
-			(
-			'client_id'=> CLIENTID, 
-			'secret_key' => SECRETKEY,
-			'shortcode' => SHORTCODE
-			)
-		);
-		
-		$query_string = "";
-		foreach($data as $piece => $piecedata)
-		{
-			$query_string .= '&'.$piece.'='.$piecedata;
-		}
-		
-		$ch = curl_init(CHIKKAURL);
-		curl_setopt($ch, CURLOPT_POST, count($data));
-		curl_setopt($ch, CURLOPT_POSTFIELDS, $query_string);
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-		curl_exec($ch);
-		curl_close($ch);
-		
-		return true;
-	}
-	function updatePlayer($link, $id) //Update Player consists of opponent's blueprint and player's turn
+	function updatePlayer($link, $id)
 	{
 		$sqlcommand = "SELECT phone, turn, oppid FROM Playing WHERE id = $id";
 		$selection = mysqli_query($link, $sqlcommand);
@@ -370,7 +268,92 @@
 		$playerrequestid = getLastRequestId($link, $playerphone);
 		replyText($playerphone, $textcontent, $playerrequestid);
 	}
-	function recordReceivedSMS($link, $message_type, $message, $mobile_number, $shortcode, $timestamp, $request_id) //test method
+	function actionPlayer($link, $id, $oppblueprint, $turn)
+	{
+		$sqlcommand = "SELECT turn, oppid FROM Playing WHERE id = $id";
+		$selection = mysqli_query($link, $sqlcommand);
+		if (mysqli_num_rows($selection) > 0) 
+		{
+			$selectedrow = mysqli_fetch_assoc($selection);
+			$previousturn = $selectedrow["turn"];
+			$oppid = $selectedrow["oppid"];
+		}
+		else
+		{
+			echo "ERROR OCCURED in actionPlayer! <br>";
+		}
+		$sqlcommand = "SELECT phone FROM Playing WHERE id = $oppid";
+		$selection = mysqli_query($link, $sqlcommand);
+		if (mysqli_num_rows($selection) > 0) 
+		{
+			$selectedrow = mysqli_fetch_assoc($selection);
+			$oppphone = $selectedrow["phone"];
+		}
+		else
+		{
+			echo "ERROR OCCURED in actionPlayer! <br>";
+		}
+		
+		if($turn > $previousturn)
+		{
+			$messagecontent = "UPDATE." . $oppblueprint . ".";
+			replyText($oppphone, $messagecontent, getLastRequestId($link, $oppphone));
+			mysqli_query($link, "UPDATE Playing SET turn = $turn WHERE id = $id");
+			mysqli_query($link, "UPDATE Playing SET blueprint = '$oppblueprint' WHERE id = $oppid");
+		}
+		else
+		{
+			echo "ERROR: Turn is not greater than player's previous turn.";
+		}
+	}
+	function forfeitPlayer($link, $id)
+	{
+		$sqlcommand = "SELECT oppid FROM Playing WHERE id = $id";
+		$selection = mysqli_query($link, $sqlcommand);
+		if (mysqli_num_rows($selection) > 0) 
+		{
+			$selectedrow = mysqli_fetch_assoc($selection);
+			$oppid = $selectedrow["oppid"];
+		}
+		else
+		{
+			echo "ERROR OCCURED in actionPlayer! <br>";
+		}
+		$sqlcommand = "SELECT phone FROM Playing WHERE id = $oppid";
+		$selection = mysqli_query($link, $sqlcommand);
+		if (mysqli_num_rows($selection) > 0) 
+		{
+			$selectedrow = mysqli_fetch_assoc($selection);
+			$oppphone = $selectedrow["phone"];
+		}
+		else
+		{
+			echo "ERROR OCCURED in actionPlayer! <br>";
+		}
+		replyText($oppphone, "FORFEIT", getLastRequestId($link, $oppphone));
+		endPlayer($link, $id);
+	}
+	function endPlayer($link, $id)
+	{
+		$sqlcommand = "SELECT oppid FROM Playing WHERE id = $id";
+		$selection = mysqli_query($link, $sqlcommand);
+		if (mysqli_num_rows($selection) > 0) 
+		{
+			$selectedrow = mysqli_fetch_assoc($selection);
+			$oppid = $selectedrow["oppid"];
+		}
+		$sqlcommand = "DELETE FROM Playing WHERE id = $id";
+		if(!(mysqli_query($link, $sqlcommand)))
+		{
+			echo "Error occured when removing player from Playing";
+		}
+		$sqlcommand = "DELETE FROM Playing WHERE id = $oppid";
+		if(!(mysqli_query($link, $sqlcommand)))
+		{
+			echo "Error occured when removing opponent from Playing";
+		}
+	}
+	function recordReceivedSMS($link, $message_type, $message, $mobile_number, $shortcode, $timestamp, $request_id)
 	{
 		$sqlcommand = 	"CREATE TABLE IF NOT EXISTS Received
 						(
@@ -393,7 +376,7 @@
 			die('SMS was NOT recorded into database: ' . mysqli_error($link));
 		}
 	}
-	function recordAccess($link) //test method
+	function recordAccess($link)
 	{
 		$sqlcommand = 	"CREATE TABLE IF NOT EXISTS Access
 						(
@@ -426,22 +409,23 @@
 		}
 		return $requestid;
 	}
+	function findPlayerID($link, $phone)
+	{
+		$sqlcommand = "SELECT id FROM Playing WHERE phone = '$phone'";
+		$selection = mysqli_query($link, $sqlcommand);
+		if (mysqli_num_rows($selection) > 0) 
+		{
+			$selectedrow = mysqli_fetch_assoc($selection);
+			return $selectedrow["id"];
+		}
+		else
+		{
+			echo "ERROR OCCURED in finding player ID! <br>";
+			return -1;
+		}
+	}
 	function allShipsLost($blueprint)
 	{
-		return (substr_count($blueprint, '1') == 0)
-	}
-	function verifyBlueprint($blueprintA, $blueprintB) //UNUSED
-	{
-		$A = str_split($blueprintA);
-		$B = str_split($blueprintB); //UNDONE
-		$difference = 0;
-		for($x = 0; $x < $A.count(); $x++)
-		{
-			if($A[$x] != $B[$x])
-			{
-				$difference++;
-			}
-		}
-		return (difference > 1);
+		return (substr_count($blueprint, '1') == 0);
 	}
 ?>
