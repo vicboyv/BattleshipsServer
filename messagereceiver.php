@@ -308,11 +308,12 @@
 	}
 	function forfeitPlayer($link, $id)
 	{
-		$sqlcommand = "SELECT oppid FROM Playing WHERE id = $id";
+		$sqlcommand = "SELECT phone, oppid FROM Playing WHERE id = $id";
 		$selection = mysqli_query($link, $sqlcommand);
 		if (mysqli_num_rows($selection) > 0) 
 		{
 			$selectedrow = mysqli_fetch_assoc($selection);
+			$phone = $selectedrow["phone"];
 			$oppid = $selectedrow["oppid"];
 		}
 		else
@@ -330,7 +331,7 @@
 		{
 			echo "ERROR OCCURED in actionPlayer! <br>";
 		}
-		replyText($oppphone, "FORFEIT.", getLastRequestId($link, $oppphone));
+		replyText($oppphone, "FORFEIT.", getLastRequestId($link, $phone));
 		endPlayer($link, $id);
 	}
 	function endPlayer($link, $id)
