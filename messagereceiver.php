@@ -330,7 +330,7 @@
 		{
 			echo "ERROR OCCURED in actionPlayer! <br>";
 		}
-		replyText($oppphone, "FORFEIT", getLastRequestId($link, $oppphone));
+		replyText($oppphone, "FORFEIT.", getLastRequestId($link, $oppphone));
 		endPlayer($link, $id);
 	}
 	function endPlayer($link, $id)
