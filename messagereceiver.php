@@ -175,6 +175,10 @@
 	function queuePlayer($link, $phonenumber, $blueprint)
 	{
 		createQueue($link);
+		if(playerPlaying($link, $phonenumber))
+		{
+			forfeitPlayer($link, findPlayerID($link, $phonenumber));
+		}
 		$sqlcommand = 	"INSERT INTO Queue(phone, blueprint) 
 						VALUES('$phonenumber', '$blueprint')";
 		if(!(mysqli_query($link, $sqlcommand)))
@@ -318,7 +322,7 @@
 		}
 		else
 		{
-			echo "ERROR OCCURED in actionPlayer! <br>";
+			echo "ERROR OCCURED in forfeitPlayer! <br>";
 		}
 		$sqlcommand = "SELECT phone FROM Playing WHERE id = $oppid";
 		$selection = mysqli_query($link, $sqlcommand);
@@ -329,7 +333,7 @@
 		}
 		else
 		{
-			echo "ERROR OCCURED in actionPlayer! <br>";
+			echo "ERROR OCCURED in forfeitPlayer! <br>";
 		}
 		replyText($oppphone, "FORFEIT.", getLastRequestId($link, $phone));
 		endPlayer($link, $id);
@@ -428,5 +432,11 @@
 	function allShipsLost($blueprint)
 	{
 		return (substr_count($blueprint, '1') == 0);
+	}
+	function playerPlaying($link, $phone)
+	{
+		$sqlcommand = "SELECT oppid FROM Playing WHERE phone = '$phone'";
+		$selection = mysqli_query($link, $sqlcommand);
+		return (mysqli_num_rows($selection) != 0);
 	}
 ?>
